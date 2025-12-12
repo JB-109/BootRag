@@ -1,53 +1,10 @@
+from config import stemmer_instance
+from config import movies_data
+from transform import transform
+from config import parser
+from InvertedIndex import InvertedIndex
 import math
-from collections import Counter
-from collections import defaultdict
-import json
-import pickle
-from nltk.stem.porter import PorterStemmer
-import string
-import argparse
-
 import sys
-import os
-
-
-def transform(query):
-    token_list = query.lower().translate(table).split()
-    token_list1 = [stemmer_instance.stem(word) for word in token_list]
-    return [word for word in token_list1 if word not in stop_words_list]
-
-parser = argparse.ArgumentParser(description="Keyword Search CLI")
-subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-search_parser = subparsers.add_parser("search", help="Search movies using BM25")
-search_parser.add_argument("query", type=str, help="Search query")
-
-build_parser = subparsers.add_parser("build", help="Build and save the inverted index")
-
-term_parser = subparsers.add_parser("tf", help="Gives the term frequency")
-term_parser.add_argument("doc_id", type=int, help="document ID")
-term_parser.add_argument("term", type=str, help="Literal term")
-
-idf_parser = subparsers.add_parser("idf", help="Inverse Document Frequency")
-idf_parser.add_argument("idf_term", type=str, help="Literal Term")
-
-tfidf_parser = subparsers.add_parser("tfidf", help="Gives tfidf")
-tfidf_parser.add_argument("tfidf_doc_id", type=int, help="document ID")
-tfidf_parser.add_argument("tfidf_term", type=str, help="Literal term")
-
-
-path = os.path.join(os.path.dirname(__file__), "../data/movies.json")
-with open(path, "r") as f:
-    # json.load parses the json file and returns a dictionary
-    movies_data = json.load(f)
-
-stop_path = os.path.join(os.path.dirname(__file__), "../data/stopwords.txt")
-with open(stop_path, "r") as f:
-    stop_words_list = f.read().splitlines()
-
-stemmer_instance = PorterStemmer()
-table = str.maketrans("", "", string.punctuation)
-
 
 
 #-------------------------------------------------------------------
@@ -112,79 +69,19 @@ def main() -> None:
             tf_idf = idf * tf
             print(f"TF-IDF score of '{args.tfidf_term}' in document '{args.tfidf_doc_id}': {tf_idf:.2f}")
 
+        case "bm25idf":
+            index.load()
+            call_result = index.get_bm25_idf(args.bm25_term)
+            print(f"BM25 IDF score of '{args.bm25_term}': {call_result:.2f}")
+
+        case "bm25tf":
+            index.load()
+            result = index.get_bm25_tf(args.bm25tf_doc_id, args.bm25tf_term, args.k1, args.b)
+            print(f"BM25 TF score of '{args.bm25tf_term}' in document '{args.bm25tf_doc_id}': {result:.2f}")
+
         case _:
             parser.print_help()
 
-
-
-
-#----------------------------------------------------------------
-
-
-
-
-class InvertedIndex:
-    def __init__(self):
-        self.index = defaultdict(set)
-        self.docmap = {}
-        self.term_frequencies = defaultdict(Counter)     
-
-    def __add_document(self, doc_id, text):
-        token_list = text.lower().translate(table).split()
-        token_list1 = [stemmer_instance.stem(word) for word in token_list]
-        token_list2 = [word for word in token_list1 if word not in stop_words_list]
-        
-        for token in token_list2:
-            if not token:
-                continue
-            self.index[token].add(doc_id)
-
-        self.term_frequencies[doc_id].update(token_list2)
-
-    def get_document(self, term):
-        return sorted(self.index[term.lower()])
-
-    def build(self, movies):
-        for each in movies["movies"]:
-            self.__add_document(each["id"], f"{each['title']} {each['description']}")
-        for each in movies["movies"]:
-            self.docmap[each["id"]] = each
-
-    def save(self):
-        os.makedirs("cache", exist_ok=True)
-        
-        with open("cache/index.pkl", "wb") as f:
-            pickle.dump(self.index, f)
-        
-        with open("cache/docmap.pkl", "wb") as f:
-            pickle.dump(self.docmap, f)
-
-        with open("cache/term_frequencies.pkl", "wb") as f:
-            pickle.dump(self.term_frequencies, f)
-
-    def load(self):
-        try:
-
-            with open("cache/index.pkl", "rb") as f:
-                self.index = pickle.load(f)
-            with open("cache/docmap.pkl", "rb") as f:
-                self.docmap = pickle.load(f)
-            with open("cache/term_frequencies.pkl", "rb") as f:
-                self.term_frequencies = pickle.load(f)
-
-        except Exception as e:
-            print(e)
-    
-    def get_tf(self, doc_id, term):
-        final_token = term.lower().translate(table).split()
-
-        try: 
-            if final_token and len(final_token) == 1:
-                return self.term_frequencies[doc_id][stemmer_instance.stem(final_token[0])]
-            raise ValueError(f"Term must be a single word, got: '{term}'")
-
-        except Exception as e:
-            print(e)
 
 #-------------------------------------------------------------------
 
