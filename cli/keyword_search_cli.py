@@ -51,22 +51,26 @@ def main() -> None:
 
         case "tf":
             index.load()
-            print(index.term_frequencies[args.doc_id][args.term])
+            print(index.get_tf(args.doc_id, args.term))
 
         case "idf":
             index.load()
             total_docs = len(index.docmap)
-            total_docs_term = len(index.index[stemmer_instance.stem(args.idf_term).lower()])
+            total_docs_term = len(index.index[transform(args.idf_term)[0]])
+
             idf = math.log((total_docs + 1) / (total_docs_term + 1))
+
             print(f"Inverse document frequency of '{args.idf_term}': {idf:.2f}")
 
         case "tfidf":
             index.load()
             total_docs = len(index.docmap)
-            total_docs_term = len(index.index[stemmer_instance.stem(args.tfidf_term).lower()])
+            total_docs_term = len(index.index[transform(args.tfidf_term)[0]])
+            
             idf = math.log((total_docs + 1) / (total_docs_term + 1))
-            tf = index.term_frequencies[args.tfidf_doc_id][stemmer_instance.stem(args.tfidf_term).lower()]
+            tf = index.get_tf(args.tfidf_doc_id, args.tfidf_term)
             tf_idf = idf * tf
+
             print(f"TF-IDF score of '{args.tfidf_term}' in document '{args.tfidf_doc_id}': {tf_idf:.2f}")
 
         case "bm25idf":
@@ -78,6 +82,12 @@ def main() -> None:
             index.load()
             result = index.get_bm25_tf(args.bm25tf_doc_id, args.bm25tf_term, args.k1, args.b)
             print(f"BM25 TF score of '{args.bm25tf_term}' in document '{args.bm25tf_doc_id}': {result:.2f}")
+
+        case "bm25search":
+            index.load()
+            result = index.bm25_search(args.bm25_query, args.bm25_limit)
+            for item in result.items():
+                print(f"({item[0]}) {index.docmap[item[0]]['title']} - Score: {item[1]:.2f}")
 
         case _:
             parser.print_help()
