@@ -1,4 +1,3 @@
-from config import stemmer_instance
 from config import movies_data
 from transform import transform
 from config import parser

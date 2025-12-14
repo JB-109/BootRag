@@ -3,8 +3,6 @@ import pickle
 from transform import transform
 from config import BM25_K1
 from collections import Counter
-from nltk.stem.porter import PorterStemmer
-from config import stemmer_instance, table, stop_words_list
 from collections import defaultdict
 
 import math
@@ -34,9 +32,18 @@ class InvertedIndex:
             return 0.0
         return sum(self.doc_length.values()) / len(self.doc_length)
 
+#-----------------------------------------------------------------------------
 
+    def get_tf(self, doc_id, term):
+        final_token = transform(term)
+        try: 
+            if final_token and len(final_token) == 1:
+                return self.term_frequencies[doc_id][final_token[0]]
+            raise ValueError(f"Term must be a single word, got: '{term}'")
 
-    
+        except Exception as e:
+            print(e)
+
     def get_bm25_idf(self, term) -> float:
         token = transform(term)
         if token and len(token) == 1:
@@ -64,18 +71,8 @@ class InvertedIndex:
 
         return dict(sorted(score_dict.items(), key=lambda item: item[1], reverse=True)[:limit])
 
-    def get_tf(self, doc_id, term):
-        final_token = transform(term)
-        try: 
-            if final_token and len(final_token) == 1:
-                return self.term_frequencies[doc_id][final_token[0]]
-            raise ValueError(f"Term must be a single word, got: '{term}'")
 
-        except Exception as e:
-            print(e)
-
-
-
+#-----------------------------------------------------------------------------
 
     def get_document(self, term):
         return sorted(self.index[term.lower()])
@@ -115,6 +112,8 @@ class InvertedIndex:
 
         except Exception as e:
             print(e)
+
+#-----------------------------------------------------------------------------
 
     def build(self, movies):
         for each in movies["movies"]:
