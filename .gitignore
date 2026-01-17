@@ -1,12 +1,10 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-data/
-cache/
+# Ignore all files in root directory
+/*
+cli/__pycache__/
+# But don't ignore these important files
+!/.gitignore
+!/.python-version
+!/pyproject.toml
+!/uv.lock
+!/README.md
+!/cli/

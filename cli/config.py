@@ -43,6 +43,7 @@ bm25_parser = subparsers.add_parser("bm25search", help="bm25 score")
 bm25_parser.add_argument("bm25_query", type=str, help="Actual Query")
 bm25_parser.add_argument("bm25_limit", type=int, nargs="?", default=5, help="limited result")
 
+
 path = os.path.join(os.path.dirname(__file__), "../data/movies.json")
 with open(path, "r") as f:
     # json.load parses the json file and returns a dictionary
