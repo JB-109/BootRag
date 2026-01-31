@@ -1,11 +1,15 @@
 import argparse
 import os
 import json
+import logging
 
 from hybrid_search import HybridSearch
 from dotenv import load_dotenv
 from google import genai
 from sentence_transformers import CrossEncoder
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
 parser = argparse.ArgumentParser(description="Hybrid Search CLI")
 subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -21,6 +25,7 @@ rrf_search_parser.add_argument("-k", type=int, default=60, help="RRF k parameter
 rrf_search_parser.add_argument("--limit", type=int, default=5, help="Number of results to return (default: 5)")
 rrf_search_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
 rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="Reranking method")
+rrf_search_parser.add_argument("--evaluate", action="store_true", help="Evaluate search results using LLM")
 
 args = parser.parse_args()
 
@@ -59,6 +64,7 @@ def main() -> None:
             # Handle query enhancement
             # this one checks for the lexical typos via the LLM.
             query = args.query
+            logging.debug(f"[STAGE 1] Original query: '{query}'")
             if args.enhance == "spell":
                 load_dotenv()
                 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
@@ -70,11 +76,12 @@ def main() -> None:
                     Corrected:"""
                                     
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash-lite",
+                    model="gemini-2.5-flash",
                     contents=prompt
                 )
                 
                 enhanced_query = response.text.strip()
+                logging.debug(f"[STAGE 2] Enhanced query (spell): '{query}' -> '{enhanced_query}'")
                 print(f"Enhanced query ({args.enhance}): '{query}' -> '{enhanced_query}'\n")
                 query = enhanced_query
 
@@ -98,11 +105,12 @@ def main() -> None:
                     Rewritten query:"""
                 
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash-lite",
+                    model="gemini-2.5-flash",
                     contents=prompt
                 )
                 
                 enhanced_query = response.text.strip()
+                logging.debug(f"[STAGE 2] Enhanced query (rewrite): '{query}' -> '{enhanced_query}'")
                 print(f"Enhanced query ({args.enhance}): '{query}' -> '{enhanced_query}'\n")
                 query = enhanced_query
 
@@ -126,11 +134,12 @@ def main() -> None:
                     """
                 
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash-lite",
+                    model="gemini-2.5-flash",
                     contents=prompt
                 )
                 
                 enhanced_query = response.text.strip()
+                logging.debug(f"[STAGE 2] Enhanced query (expand): '{query}' -> '{enhanced_query}'")
                 print(f"Enhanced query ({args.enhance}): '{query}' -> '{enhanced_query}'\n")
                 query = enhanced_query
             
@@ -140,7 +149,10 @@ def main() -> None:
             # Determine how many results to fetch
             # It needs a larger pool of candidates for reranking.
             fetch_limit = args.limit * 5 if args.rerank_method in ["individual", "batch", "cross_encoder"] else args.limit
+            logging.debug(f"[STAGE 3] Running RRF search with k={args.k}, fetch_limit={fetch_limit}")
             results = hybrid_search.rrf_search(query, args.k, fetch_limit)
+            logging.debug(f"[STAGE 3] RRF search returned {len(results)} results")
+            logging.debug(f"[STAGE 3] Top 5 RRF results: {[r['title'] for r in results[:5]]}")
             
             # Handle re-ranking
             if args.rerank_method == "individual":
@@ -176,7 +188,7 @@ def main() -> None:
                 
 
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash-lite",
+                    model="gemini-2.5-flash",
                     contents=prompt
                 )
                 
@@ -195,6 +207,7 @@ def main() -> None:
                     result['rerank_score'] = score
                 
                 results = sorted(results, key=lambda x: x['rerank_score'], reverse=True)[:args.limit]
+                logging.debug(f"[STAGE 4] After individual reranking: {[(r['title'], r['rerank_score']) for r in results]}")
                 
                 print(f"Reciprocal Rank Fusion Results for '{query}' (k={args.k}):\n")
                 
@@ -230,7 +243,7 @@ def main() -> None:
                     """
                 
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash-lite",
+                    model="gemini-2.5-flash",
                     contents=prompt
                 )
                 
@@ -257,6 +270,7 @@ def main() -> None:
                     result['rerank_rank'] = rank_map.get(result['temp_id'], 999)
                 
                 results = sorted(results, key=lambda x: x['rerank_rank'])[:args.limit]
+                logging.debug(f"[STAGE 4] After batch reranking: {[(r['title'], r['rerank_rank']) for r in results]}")
                 
                 print(f"Reciprocal Rank Fusion Results for '{query}' (k={args.k}):")
                 
@@ -288,6 +302,7 @@ def main() -> None:
                     result['cross_encoder_score'] = scores[idx]
                 
                 results = sorted(results, key=lambda x: x['cross_encoder_score'], reverse=True)[:args.limit]
+                logging.debug(f"[STAGE 4] After cross_encoder reranking: {[(r['title'], r['cross_encoder_score']) for r in results]}")
                 
                 print(f"Reciprocal Rank Fusion Results for '{query}' (k={args.k}):")
                 
@@ -309,6 +324,58 @@ def main() -> None:
                     semantic_rank = result['semantic_rank'] if result['semantic_rank'] else "N/A"
                     print(f"   BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}")
                     print(f"   {result['document']}...")
+            
+            # Handle evaluation if flag is set
+            if args.evaluate:
+                print("\n" + "="*50)
+                print("EVALUATION REPORT")
+                print("="*50 + "\n")
+                
+                load_dotenv()
+                api_key = os.environ.get("GEMINI_API_KEY")
+                client = genai.Client(api_key=api_key)
+                
+                # Format results for evaluation
+                formatted_results = []
+                for i, result in enumerate(results, 1):
+                    formatted_results.append(f"{i}. {result['title']} - {result.get('document', '')}")
+                
+                prompt = f"""Rate how relevant each result is to this query on a 0-3 scale:
+
+Query: "{query}"
+
+Results:
+{chr(10).join(formatted_results)}
+
+Scale:
+- 3: Highly relevant
+- 2: Relevant
+- 1: Marginally relevant
+- 0: Not relevant
+
+Do NOT give any numbers out than 0, 1, 2, or 3.
+
+Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
+
+[2, 0, 3, 2, 0, 1]"""
+                
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=prompt
+                )
+                
+                # Parse scores
+                try:
+                    scores = json.loads(response.text.strip())
+                except json.JSONDecodeError:
+                    # Fallback: assign all 0s
+                    scores = [0] * len(results)
+                
+                # Print evaluation report
+                for i, result in enumerate(results):
+                    score = scores[i] if i < len(scores) else 0
+                    print(f"{i+1}. {result['title']}: {score}/3")
+        
         
         case _:
             parser.print_help()

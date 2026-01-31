@@ -1,6 +1,11 @@
 # Ignore all files in root directory
 /*
 cli/__pycache__/
+cli/multimodal_search.py
+cli/multimodal_search_cli.py
+cli/describe_image_cli.py
+cache/
+
 # But don't ignore these important files
 !/.gitignore
 !/.python-version

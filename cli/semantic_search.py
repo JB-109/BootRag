@@ -18,7 +18,7 @@ class SemanticSearch:
     def generate_embedding(self, text):
         if len(text.split()) == 0:
             raise ValueError("Empty Text")
-        embedding = self.model.encode([text])[0]
+        embedding = self.model.encode([text], show_progress_bar=True)[0]
         return embedding
 
     # it generates embedding of the whole doc via batch processing.
